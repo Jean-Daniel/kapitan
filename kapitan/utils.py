@@ -38,7 +38,7 @@ from distutils.dir_util import mkpath
 logger = logging.getLogger(__name__)
 
 try:
-    import _jsonnet as jsonnet
+    import _gojsonnet as jsonnet
 except ImportError as e:
     logger.debug("Could not import jsonnet: %s", e)
 
