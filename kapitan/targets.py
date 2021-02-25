@@ -433,6 +433,8 @@ def compile_target(target_obj, search_paths, compile_path, ref_controller, **kwa
             input_compiler = Jinja2(compile_path, search_paths, ref_controller)
         elif input_type == "jsonnet":
             input_compiler = Jsonnet(compile_path, search_paths, ref_controller)
+            if "search_paths" in comp_obj:
+                input_compiler.set_search_paths(comp_obj["search_paths"])
         elif input_type == "kadet":
             input_compiler = Kadet(compile_path, search_paths, ref_controller)
             if "input_params" in comp_obj:

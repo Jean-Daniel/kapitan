@@ -19,6 +19,23 @@ logger = logging.getLogger(__name__)
 class Jsonnet(InputType):
     def __init__(self, compile_path, search_paths, ref_controller):
         super().__init__("jsonnet", compile_path, search_paths, ref_controller)
+        self.input_search_paths = None
+
+    def set_search_paths(self, search_paths):
+        self.input_search_paths = []
+        for path in search_paths:
+            search_path = self.resolve_path(path)
+            if search_path:
+                self.input_search_paths.append(search_path)
+
+    def resolve_path(self, path):
+        if (os.path.isabs(path)):
+            return path
+        for search_path in self.search_paths:
+            abspath = os.path.join(search_path, path)
+            if (os.path.exists(abspath)):
+                return abspath
+        return None
 
     def compile_file(self, file_path, compile_path, ext_vars, **kwargs):
         """
@@ -31,9 +48,14 @@ class Jsonnet(InputType):
             target_name: default None, set to current target being compiled
             indent: default 2
         """
+        search_paths = self.search_paths
+
+        if self.input_search_paths:
+            search_paths = self.input_search_paths + search_paths
+            self.input_search_paths = None
 
         def _search_imports(cwd, imp):
-            return search_imports(cwd, imp, self.search_paths)
+            return search_imports(cwd, imp, search_paths)
 
         json_output = jsonnet_file(
             file_path,
@@ -100,6 +122,8 @@ class Jsonnet(InputType):
                 raise ValueError(
                     f"Output type defined in inventory for {file_path} is neither 'json', 'yaml' nor 'plain'"
                 )
+
+        self.input_search_paths = None
 
     def default_output_type(self):
         return "yaml"
