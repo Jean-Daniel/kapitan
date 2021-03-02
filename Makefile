@@ -65,7 +65,3 @@ test_binary:
 .PHONY: build_helm_binding
 build_helm_binding:
 	bash kapitan/inputs/helm/build.sh
-
-.PHONY: build_helm_fetch_binding
-build_helm_fetch_binding:
-	bash kapitan/dependency_manager/helm/build.sh
