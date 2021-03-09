@@ -28,9 +28,6 @@ from kapitan import cached, defaults
 from kapitan.errors import CompileError
 from kapitan.inputs.jinja2_filters import load_jinja2_filters, load_jinja2_filters_from_file
 from kapitan.version import VERSION
-from distutils.errors import DistutilsFileError
-from distutils.file_util import _copy_file_contents
-from distutils.dir_util import mkpath
 
 "random utils"
 
@@ -522,22 +519,26 @@ def safe_copy_file(src, dst):
     returns a tupple (src, val)
     file not copied if val = 0 else 1
     """
-
-    if not os.path.isfile(src):
-        raise DistutilsFileError("Can't copy {}: doesn't exist or is not a regular file".format(src))
-
     if os.path.isdir(dst):
-        dir = dst
+        destdir = dst
         dst = os.path.join(dst, os.path.basename(src))
     else:
-        dir = os.path.dirname(dst)
+        destdir = os.path.dirname(dst)
 
     if os.path.isfile(dst):
         logger.warning("Not updating %s (file already exists)", dst)
-        return (dst, 0)
-    _copy_file_contents(src, dst)
-    logger.debug("Copied %s to %s", src, dir)
-    return (dst, 1)
+        return dst, 0
+
+    buffer_size = 16 * 1024
+    with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
+        while True:
+            buf = fsrc.read(buffer_size)
+            if not buf:
+                break
+            fdst.write(buf)
+
+    logger.debug("Copied %s to %s", src, destdir)
+    return dst, 1
 
 
 def safe_copy_tree(src, dst):
@@ -551,13 +552,14 @@ def safe_copy_tree(src, dst):
     Returns a list of copied file paths.
     """
     if not os.path.isdir(src):
-        raise DistutilsFileError("Cannot copy tree {}: not a directory".format(src))
-    try:
-        names = os.listdir(src)
-    except OSError as e:
-        raise DistutilsFileError("Error listing files in {}: {}".format(src, e.strerror))
+        raise NotADirectoryError("Cannot copy tree {}: not a directory".format(src))
+    names = os.listdir(src)
 
-    mkpath(dst)
+    try:
+        os.makedirs(dst)
+    except FileExistsError:
+        pass
+
     outputs = []
 
     for name in names:
