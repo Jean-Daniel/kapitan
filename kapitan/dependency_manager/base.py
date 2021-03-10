@@ -7,10 +7,9 @@ import logging
 import multiprocessing
 import os
 from collections import defaultdict, namedtuple
-from distutils.dir_util import copy_tree
 from functools import partial
 from mimetypes import MimeTypes
-from shutil import copyfile, rmtree
+from shutil import copyfile, rmtree, copytree
 
 from git import GitCommandError
 from git import Repo
@@ -122,7 +121,7 @@ def fetch_git_dependency(dep_mapping, save_dir, force, item_type="Dependency"):
                     "{} {}: subdir {} not found in repo".format(item_type, source, sub_dir)
                 )
         if force:
-            copy_tree(copy_src_path, output_path)
+            copytree(copy_src_path, output_path)
         else:
             safe_copy_tree(copy_src_path, output_path)
         logger.info("%s %s: saved to %s", item_type, source, output_path)
@@ -236,7 +235,7 @@ def fetch_helm_chart(dep_mapping, save_dir, force):
         if parent_dir != "":
             os.makedirs(parent_dir, exist_ok=True)
         if force:
-            copy_tree(cached_repo_path, output_path)
+            copytree(cached_repo_path, output_path)
         else:
             safe_copy_tree(cached_repo_path, output_path)
         logger.info("Dependency %s: saved to %s", source.chart_name, output_path)

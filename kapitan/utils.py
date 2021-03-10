@@ -12,6 +12,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import stat
 import sys
 import re
@@ -520,25 +521,18 @@ def safe_copy_file(src, dst):
     file not copied if val = 0 else 1
     """
     if os.path.isdir(dst):
-        destdir = dst
         dst = os.path.join(dst, os.path.basename(src))
-    else:
-        destdir = os.path.dirname(dst)
 
+    return _safe_copy_file(src, dst)
+
+
+def _safe_copy_file(src, dst):
     if os.path.isfile(dst):
         logger.warning("Not updating %s (file already exists)", dst)
-        return dst, 0
+        return
 
-    buffer_size = 16 * 1024
-    with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
-        while True:
-            buf = fsrc.read(buffer_size)
-            if not buf:
-                break
-            fdst.write(buf)
-
-    logger.debug("Copied %s to %s", src, destdir)
-    return dst, 1
+    shutil.copy(src, dst)
+    logger.debug("Copied %s to %s", src, os.path.dirname(dst))
 
 
 def safe_copy_tree(src, dst):
@@ -553,27 +547,5 @@ def safe_copy_tree(src, dst):
     """
     if not os.path.isdir(src):
         raise NotADirectoryError("Cannot copy tree {}: not a directory".format(src))
-    names = os.listdir(src)
 
-    try:
-        os.makedirs(dst)
-    except FileExistsError:
-        pass
-
-    outputs = []
-
-    for name in names:
-        src_name = os.path.join(src, name)
-        dst_name = os.path.join(dst, name)
-
-        if name.startswith("."):
-            logger.debug("Not copying %s", src_name)
-            continue
-        if os.path.isdir(src_name):
-            outputs.extend(safe_copy_tree(src_name, dst_name))
-
-        else:
-            safe_copy_file(src_name, dst_name)
-            outputs.append(dst_name)
-
-    return outputs
+    shutil.copytree(src, dst, dirs_exist_ok=True, copy_function=_safe_copy_file)
