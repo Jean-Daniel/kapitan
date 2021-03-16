@@ -75,6 +75,9 @@ class Jsonnet(InputType):
             output_obj = prune_empty(output_obj)
             logger.debug("Pruned output for: %s", file_path)
 
+        if not output_obj:
+            return
+
         if not isinstance(output_obj, dict):
             tmp_output_obj = output_obj
             # assume that the output filename is the
