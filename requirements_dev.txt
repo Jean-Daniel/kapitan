@@ -1,0 +1,21 @@
+# kapitan dependencies
+gojsonnet
+pyyaml
+toml
+Jinja2
+jsonschema
+python-gnupg
+cryptography
+google-api-python-client
+boto3
+
+requests
+addict
+yamllint
+rfc3987
+GitPython
+hvac
+azure-keyvault-keys
+azure-identity
+# Reclass dependencies
+pyparsing
