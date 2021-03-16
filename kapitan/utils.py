@@ -199,11 +199,13 @@ def prune_empty(d):
 
     if isinstance(d, list):
         if len(d) > 0:
-            return [v for v in (prune_empty(v) for v in d) if v is not None]
+            pruned = [v for v in (prune_empty(v) for v in d) if v is not None]
+            return pruned if pruned else None
 
     if isinstance(d, dict):
         if len(d) > 0:
-            return {k: v for k, v in ((k, prune_empty(v)) for k, v in d.items()) if v is not None}
+            pruned = {k: v for k, v in ((k, prune_empty(v)) for k, v in d.items()) if v is not None}
+            return pruned if pruned else None
 
 
 class PrettyDumper(yaml.CSafeDumper if yaml.__with_libyaml__ else yaml.SafeDumper):
