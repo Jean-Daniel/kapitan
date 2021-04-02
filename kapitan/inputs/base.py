@@ -84,6 +84,7 @@ class InputType(object):
         _compile_path = os.path.join(self.compile_path, target_name, output_path)
         # support writing to an already existent dir
         os.makedirs(_compile_path, exist_ok=True)
+        return _compile_path
 
     def compile_file(self, file_path, compile_path, ext_vars, **kwargs):
         """implements compilation for file_path to compile_path with ext_vars"""
