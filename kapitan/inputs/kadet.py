@@ -5,15 +5,17 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+import inspect
 import json
 import logging
 import os
 import sys
+from functools import cached_property
 from importlib.util import module_from_spec, spec_from_file_location
 
-import inspect
 import yaml
 from addict import Dict
+
 from kapitan.errors import CompileError
 from kapitan.inputs.base import CompiledFile, InputType
 from kapitan.resources import inventory as inventory_func
@@ -50,7 +52,7 @@ def module_from_path(path, check_name=None):
     return mod, spec
 
 
-def load_from_search_paths(module_name):
+def _load_from_search_paths(module_name, search_paths):
     """
     loads and executes python module with module_name from search paths
     returns module
@@ -64,6 +66,10 @@ def load_from_search_paths(module_name):
         except (ModuleNotFoundError, FileNotFoundError):
             pass
     raise ModuleNotFoundError("Could not load module name {}".format(module_name))
+
+
+def load_from_search_paths(module_name):
+    return _load_from_search_paths(module_name, search_paths)
 
 
 class Kadet(InputType):
@@ -99,29 +105,38 @@ class Kadet(InputType):
         # reset between each compile if kadet component is used multiple times
         self.input_params = {}
 
-        # These will be updated per target
-        # XXX At the moment we have no other way of setting externals for modules...
-        global search_paths
-        search_paths = self.search_paths
-        global inventory
-        inventory = lambda: Dict(inventory_func(self.search_paths, target_name, inventory_path))  # noqa E731
-        global inventory_global
-        inventory_global = lambda: Dict(inventory_func(self.search_paths, None, inventory_path))  # noqa E731
-
         kadet_module, spec = module_from_path(file_path)
         sys.modules[spec.name] = kadet_module
         spec.loader.exec_module(kadet_module)
         logger.debug("Kadet.compile_file: spec.name: %s", spec.name)
 
-        kadet_arg_spec = inspect.getfullargspec(kadet_module.main)
-        logger.debug("Kadet main args: %s", kadet_arg_spec.args)
-
-        if len(kadet_arg_spec.args) == 1:
-            output_obj = kadet_module.main(input_params)
-        elif len(kadet_arg_spec.args) == 0:
-            output_obj = kadet_module.main()
+        if hasattr(kadet_module, "Task") and issubclass(kadet_module.Task, KadetTask):
+            task = kadet_module.Task(target_name, self.search_paths, inventory_path)
+            logger.debug("Kadet Task")
+            output_obj = task.run(input_params)
         else:
-            raise ValueError(f"Kadet {spec.name} main parameters not equal to 1 or 0")
+            # These will be updated per target
+            # XXX At the moment we have no other way of setting externals for modules...
+            global search_paths
+            search_paths = self.search_paths
+            global inventory
+            inventory = lambda: Dict(
+                inventory_func(self.search_paths, target_name, inventory_path)
+            )  # noqa E731
+            global inventory_global
+            inventory_global = lambda: Dict(
+                inventory_func(self.search_paths, None, inventory_path)
+            )  # noqa E731
+
+            kadet_arg_spec = inspect.getfullargspec(kadet_module.main)
+            logger.debug("Kadet main args: %s", kadet_arg_spec.args)
+
+            if len(kadet_arg_spec.args) == 1:
+                output_obj = kadet_module.main(input_params)
+            elif len(kadet_arg_spec.args) == 0:
+                output_obj = kadet_module.main()
+            else:
+                raise ValueError(f"Kadet {spec.name} main parameters not equal to 1 or 0")
 
         output_obj = _to_dict(output_obj)
         if prune:
@@ -187,14 +202,13 @@ def _to_dict(obj):
         # BaseObj needs to return to_dict()
         return obj.root.to_dict()
     elif isinstance(obj, list):
-        obj = [_to_dict(item) for item in obj]
-        # list has no .to_dict, return itself
-        return obj
+        # create new instance to make sure this is a list and not a subclass,
+        # as the YAML encoder does not supports subclasses.
+        return [_to_dict(item) for item in obj]
     elif isinstance(obj, dict):
-        for k, v in obj.items():
-            obj[k] = _to_dict(v)
-        # dict has no .to_dict, return itself
-        return obj
+        # create new instance to make sure this is a dict and not a subclass,
+        # as the YAML encoder does not supports subclasses.
+        return {k: _to_dict(v) for k, v in obj.items()}
 
     # anything else, return itself
     return obj
@@ -288,3 +302,32 @@ class BaseObj(object):
         returns object dict
         """
         return _to_dict(self)
+
+
+class KadetTask:
+    def __init__(self, target_name, search_paths, inventory_path):
+        self.target_name = target_name
+        self.search_paths = search_paths
+        self.inventory_path = inventory_path
+
+    @property
+    def inv(self):
+        return self.inventory
+
+    @cached_property
+    def inventory(self):
+        return Dict(inventory_func(self.search_paths, self.target_name, self.inventory_path))
+
+    @cached_property
+    def inventory_global(self):
+        return Dict(inventory_func(self.search_paths, None, self.inventory_path))
+
+    def load_from_search_paths(self, module_name: str):
+        """
+        loads and executes python module with module_name from search paths
+        returns module
+        """
+        return _load_from_search_paths(module_name, self.search_paths)
+
+    def run(self, input_params: dict) -> dict:
+        raise NotImplementedError()
