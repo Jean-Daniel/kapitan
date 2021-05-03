@@ -4,14 +4,16 @@
 # SPDX-FileCopyrightText: 2020 The Kapitan Authors <kapitan-admins@googlegroups.com>
 #
 # SPDX-License-Identifier: Apache-2.0
-
+import glob
 import inspect
+import itertools
 import json
 import logging
 import os
 import sys
 from functools import cached_property
 from importlib.util import module_from_spec, spec_from_file_location
+from typing import Collection
 
 import yaml
 from addict import Dict
@@ -34,11 +36,13 @@ def module_from_path(path, check_name=None):
     returns tuple with module and spec
     """
 
-    if not os.path.isdir(path):
-        raise FileNotFoundError("path: {} must be an existing directory".format(path))
+    if os.path.isdir(path):
+        module_name = os.path.basename(os.path.normpath(path))
+        init_path = os.path.join(path, "__init__.py")
+    else:
+        init_path = os.path.normpath(path)
+        module_name, _ = os.path.splitext(os.path.basename(init_path))
 
-    module_name = os.path.basename(os.path.normpath(path))
-    init_path = os.path.join(path, "__init__.py")
     spec = spec_from_file_location("kadet_component_{}".format(module_name), init_path)
     mod = module_from_spec(spec)
 
@@ -105,6 +109,16 @@ class Kadet(InputType):
         # reset between each compile if kadet component is used multiple times
         self.input_params = {}
 
+        # Must be done before exec_module (but is useless for Task based module)
+        # These will be updated per target
+        # XXX At the moment we have no other way of setting externals for modules...
+        global search_paths
+        search_paths = self.search_paths
+        global inventory
+        inventory = lambda: Dict(inventory_func(self.search_paths, target_name, inventory_path))  # noqa E731
+        global inventory_global
+        inventory_global = lambda: Dict(inventory_func(self.search_paths, None, inventory_path))  # noqa E731
+
         kadet_module, spec = module_from_path(file_path)
         sys.modules[spec.name] = kadet_module
         spec.loader.exec_module(kadet_module)
@@ -115,19 +129,6 @@ class Kadet(InputType):
             logger.debug("Kadet Task")
             output_obj = task.run(input_params)
         else:
-            # These will be updated per target
-            # XXX At the moment we have no other way of setting externals for modules...
-            global search_paths
-            search_paths = self.search_paths
-            global inventory
-            inventory = lambda: Dict(
-                inventory_func(self.search_paths, target_name, inventory_path)
-            )  # noqa E731
-            global inventory_global
-            inventory_global = lambda: Dict(
-                inventory_func(self.search_paths, None, inventory_path)
-            )  # noqa E731
-
             kadet_arg_spec = inspect.getfullargspec(kadet_module.main)
             logger.debug("Kadet main args: %s", kadet_arg_spec.args)
 
@@ -321,6 +322,10 @@ class KadetTask:
     @cached_property
     def inventory_global(self):
         return Dict(inventory_func(self.search_paths, None, self.inventory_path))
+
+    def find_in_search_path(self, input_path) -> Collection[str]:
+        globbed_paths = [glob.glob(os.path.join(path, input_path)) for path in self.search_paths]
+        return set(itertools.chain.from_iterable(globbed_paths))
 
     def load_from_search_paths(self, module_name: str):
         """
