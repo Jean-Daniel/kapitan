@@ -51,7 +51,7 @@ class InputType(object):
                 )
             input_paths.extend(inputs)
 
-        kwargs['prune'] = comp_obj.get('prune', kwargs.get('prune', False))
+        kwargs["prune"] = comp_obj.get("prune", kwargs.get("prune", False))
         for input_path in input_paths:
             self.compile_input_path(input_path, comp_obj, ext_vars, **kwargs)
 

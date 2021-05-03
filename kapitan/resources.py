@@ -38,6 +38,7 @@ except ImportError:
 
 JSONNET_CACHE = {}
 
+
 def resource_callbacks(search_paths):
     """
     Returns a dict with all the functions to be used
