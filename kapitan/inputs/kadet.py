@@ -12,6 +12,8 @@ import logging
 import os
 import sys
 from functools import cached_property
+from importlib.abc import MetaPathFinder
+from importlib.machinery import PathFinder
 from importlib.util import module_from_spec, spec_from_file_location
 from typing import Collection
 
@@ -44,7 +46,6 @@ def module_from_path(path, check_name=None):
         module_name, _ = os.path.splitext(os.path.basename(init_path))
 
     spec = spec_from_file_location("kadet_component_{}".format(module_name), init_path)
-    mod = module_from_spec(spec)
 
     if spec is None:
         raise ModuleNotFoundError("Could not load module in path {}".format(path))
@@ -53,6 +54,7 @@ def module_from_path(path, check_name=None):
             "Module name {} does not match check_name {}".format(module_name, check_name)
         )
 
+    mod = module_from_spec(spec)
     return mod, spec
 
 
@@ -65,11 +67,21 @@ def _load_from_search_paths(module_name, search_paths):
         try:
             _path = os.path.join(path, module_name)
             mod, spec = module_from_path(_path, check_name=module_name)
-            spec.loader.exec_module(mod)
-            return mod
         except (ModuleNotFoundError, FileNotFoundError):
-            pass
+            continue
+        # register module -> required to perform relative import in imported module
+        sys.modules[spec.name] = mod
+        spec.loader.exec_module(mod)
+        return mod
     raise ModuleNotFoundError("Could not load module name {}".format(module_name))
+
+
+class KadetFinder(MetaPathFinder):
+    def __init__(self, search_paths):
+        self.search_paths = search_paths
+
+    def find_spec(self, fullname: str, path=None, target=None):
+        return PathFinder.find_spec(fullname, path or self.search_paths, target)
 
 
 def load_from_search_paths(module_name):
@@ -121,7 +133,14 @@ class Kadet(InputType):
 
         kadet_module, spec = module_from_path(file_path)
         sys.modules[spec.name] = kadet_module
-        spec.loader.exec_module(kadet_module)
+
+        hook = KadetFinder(self.search_paths)
+        sys.meta_path.append(hook)
+        try:
+            spec.loader.exec_module(kadet_module)
+        finally:
+            sys.meta_path.remove(hook)
+
         logger.debug("Kadet.compile_file: spec.name: %s", spec.name)
 
         if hasattr(kadet_module, "Task") and issubclass(kadet_module.Task, KadetTask):
@@ -326,13 +345,6 @@ class KadetTask:
     def find_in_search_path(self, input_path) -> Collection[str]:
         globbed_paths = [glob.glob(os.path.join(path, input_path)) for path in self.search_paths]
         return set(itertools.chain.from_iterable(globbed_paths))
-
-    def load_from_search_paths(self, module_name: str):
-        """
-        loads and executes python module with module_name from search paths
-        returns module
-        """
-        return _load_from_search_paths(module_name, self.search_paths)
 
     def run(self, input_params: dict) -> dict:
         raise NotImplementedError()
