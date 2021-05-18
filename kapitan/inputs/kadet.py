@@ -11,19 +11,17 @@ import json
 import logging
 import os
 import sys
+import yaml
+from addict import Dict
 from functools import cached_property
 from importlib.abc import MetaPathFinder
 from importlib.machinery import PathFinder
 from importlib.util import module_from_spec, spec_from_file_location
-from typing import Collection
-
-import yaml
-from addict import Dict
-
 from kapitan.errors import CompileError
 from kapitan.inputs.base import CompiledFile, InputType
 from kapitan.resources import inventory as inventory_func
 from kapitan.utils import prune_empty
+from typing import Collection
 
 logger = logging.getLogger(__name__)
 inventory = None
@@ -334,13 +332,17 @@ class KadetTask:
     def inv(self):
         return self.inventory
 
+    @property
+    def params(self) -> dict:
+        return self.inv["parameters"]
+
     @cached_property
     def inventory(self):
-        return Dict(inventory_func(self.search_paths, self.target_name, self.inventory_path))
+        return inventory_func(self.search_paths, self.target_name, self.inventory_path)
 
     @cached_property
     def inventory_global(self):
-        return Dict(inventory_func(self.search_paths, None, self.inventory_path))
+        return inventory_func(self.search_paths, None, self.inventory_path)
 
     def find_in_search_path(self, input_path) -> Collection[str]:
         globbed_paths = [glob.glob(os.path.join(path, input_path)) for path in self.search_paths]
