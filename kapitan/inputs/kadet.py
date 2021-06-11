@@ -336,6 +336,10 @@ class KadetTask:
     def params(self) -> dict:
         return self.inv["parameters"]
 
+    @property
+    def target(self) -> str:
+        return self.params["kapitan"]["vars"]["target"]
+
     @cached_property
     def inventory(self):
         return inventory_func(self.search_paths, self.target_name, self.inventory_path)
